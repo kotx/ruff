@@ -180,7 +180,7 @@ impl<'db> ProtocolInstanceType<'db> {
 
     /// TODO: consider the types of the members as well as their existence
     pub(super) fn is_equivalent_to(self, db: &'db dyn Db, other: Self) -> bool {
-        self.protocol_members(db).set_eq(other.protocol_members(db))
+        self.normalized(db) == other.normalized(db)
     }
 
     /// TODO: consider the types of the members as well as their existence
