@@ -294,8 +294,8 @@ runtime -- these reveal `bool` rather than `Literal[True]` or `Literal[False]`, 
 incorrect:
 
 ```py
-typing_extensions.reveal_type(typing.Protocol is typing_extensions.Protocol)  # revealed: bool
-typing_extensions.reveal_type(typing.Protocol is not typing_extensions.Protocol)  # revealed: bool
+reveal_type(typing.Protocol is typing_extensions.Protocol)  # revealed: bool
+reveal_type(typing.Protocol is not typing_extensions.Protocol)  # revealed: bool
 ```
 
 ## Calls to protocol classes
