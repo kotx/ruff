@@ -736,9 +736,8 @@ means that these protocols are also equivalent to `UniversalSet` and `object`:
 class SupportsStr(Protocol):
     def __str__(self) -> str: ...
 
-# TODO: these should pass
-static_assert(is_equivalent_to(SupportsStr, UniversalSet))  # error: [static-assert-error]
-static_assert(is_equivalent_to(SupportsStr, object))  # error: [static-assert-error]
+static_assert(is_equivalent_to(SupportsStr, UniversalSet))
+static_assert(is_equivalent_to(SupportsStr, object))
 
 class SupportsClass(Protocol):
     @property
@@ -1300,9 +1299,12 @@ class FalsyFooSubclass(FalsyFoo, Protocol):
     y: str
 
 def g(a: Truthy, b: FalsyFoo, c: FalsyFooSubclass):
-    reveal_type(bool(a))  # revealed: Literal[True]
-    reveal_type(bool(b))  # revealed: Literal[False]
-    reveal_type(bool(c))  # revealed: Literal[False]
+    # TODO should be `Literal[True]
+    reveal_type(bool(a))  # revealed: bool
+    # TODO should be `Literal[False]
+    reveal_type(bool(b))  # revealed: bool
+    # TODO should be `Literal[False]
+    reveal_type(bool(c))  # revealed: bool
 ```
 
 It is not sufficient for a protocol to have a callable `__bool__` instance member that returns

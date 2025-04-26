@@ -138,12 +138,8 @@ impl<'db> ProtocolInstanceType<'db> {
     }
 
     pub(super) fn normalized(self, db: &'db dyn Db) -> Type<'db> {
-        let members = self.protocol_members(db);
         let object = KnownClass::Object.to_instance(db);
-        if members
-            .iter()
-            .all(|member| !object.member(db, member).symbol.is_unbound())
-        {
+        if object.satisfies_protocol(db, self) {
             return object;
         }
         match self.0 {
