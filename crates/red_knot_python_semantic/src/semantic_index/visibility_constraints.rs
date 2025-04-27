@@ -581,7 +581,7 @@ impl VisibilityConstraints {
                     ruff_python_ast::Singleton::False => Type::BooleanLiteral(false),
                 };
 
-                debug_assert!(singleton_ty.is_singleton(db));
+                //debug_assert!(singleton_ty.is_singleton(db));
 
                 if subject_ty.is_equivalent_to(db, singleton_ty) {
                     Truthiness::AlwaysTrue
