@@ -121,6 +121,10 @@ impl<'db> TupleType<'db> {
     pub(crate) fn is_single_valued(self, db: &'db dyn Db) -> bool {
         self.tuple(db).is_single_valued(db)
     }
+
+    pub fn len(self, db: &'db dyn Db) -> TupleLength {
+        self.tuple(db).len()
+    }
 }
 
 /// A fixed-length tuple.
@@ -154,8 +158,8 @@ impl<'db> FixedLengthTuple<'db> {
     }
 
     /// Returns the length of this tuple.
-    pub(crate) fn len(&self) -> usize {
-        self.0.len()
+    pub(crate) fn len(&self) -> TupleLength {
+        TupleLength::Fixed(self.0.len())
     }
 
     fn is_empty(&self) -> bool {
@@ -339,9 +343,8 @@ impl<'db> VariableLengthTuple<'db> {
             .chain(self.suffix.iter().copied())
     }
 
-    /// Returns the minimum length of this tuple.
-    pub(crate) fn minimum_length(&self) -> usize {
-        self.prefix.len() + self.suffix.len()
+    pub(crate) fn len(&self) -> TupleLength {
+        TupleLength::Variable(self.prefix.len(), self.suffix.len())
     }
 
     fn concat(&self, db: &'db dyn Db, other: &Tuple<'db>) -> Tuple<'db> {
@@ -673,4 +676,25 @@ impl<'db> PyIndex for &Tuple<'db> {
             Tuple::Variable(tuple) => tuple.py_index(index),
         }
     }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum TupleLength {
+    Fixed(usize),
+    Variable(usize, usize),
+}
+
+impl TupleLength {
+    pub(crate) fn minimum_length(self) -> usize {
+        match self {
+            TupleLength::Fixed(fixed) => fixed,
+            TupleLength::Variable(prefix, suffix) => prefix + suffix,
+        }
+    }
+}
+
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub(crate) enum TupleError<'db> {
+    IncompatibleVariableLengthElements { existing: Type<'db>, new: Type<'db> },
+    SuffixAfterVariableLengthElement,
 }
