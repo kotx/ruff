@@ -184,6 +184,11 @@ impl<'db> FixedLengthTuple<'db> {
         }
     }
 
+    /// Adds a sequence of fixed elements to the end of this tuple.
+    pub(crate) fn extend(&mut self, elements: impl Iterator<Item = Type<'db>>) {
+        self.0.extend(elements);
+    }
+
     pub(crate) fn push(&mut self, element: Type<'db>) {
         self.0.push(element);
     }
@@ -312,6 +317,20 @@ impl<'db> VariableLengthTuple<'db> {
         }
     }
 
+    /// Creates a new tuple containing zero or more elements of a given type, along with an
+    /// optional prefix and/or suffix.
+    pub(crate) fn new(
+        prefix: impl IntoIterator<Item = Type<'db>>,
+        variable: Type<'db>,
+        suffix: impl IntoIterator<Item = Type<'db>>,
+    ) -> Self {
+        Self {
+            prefix: prefix.into_iter().collect(),
+            variable,
+            suffix: suffix.into_iter().collect(),
+        }
+    }
+
     /// Returns an iterator of all of the element types of this tuple. Does not deduplicate the
     /// tuples, and does not distinguish between fixed- and variable-length elements.
     pub(crate) fn elements(&self) -> impl Iterator<Item = Type<'db>> + '_ {
@@ -352,6 +371,11 @@ impl<'db> VariableLengthTuple<'db> {
                 })
             }
         }
+    }
+
+    /// Adds a sequence of fixed elements to the end of this tuple.
+    pub(crate) fn extend(&mut self, types: impl Iterator<Item = Type<'db>>) {
+        self.suffix.extend(types);
     }
 
     #[must_use]
@@ -499,6 +523,14 @@ pub enum Tuple<'db> {
 }
 
 impl<'db> Tuple<'db> {
+    pub(crate) fn empty() -> Self {
+        FixedLengthTuple::empty().into()
+    }
+
+    pub(crate) fn fixed_length(elements: impl IntoIterator<Item = Type<'db>>) -> Self {
+        FixedLengthTuple::from_elements(elements).into()
+    }
+
     /// Returns an iterator of all of the element types of this tuple. Does not deduplicate the
     /// tuples, and does not distinguish between fixed- and variable-length elements.
     pub(crate) fn elements(&self) -> impl Iterator<Item = Type<'db>> + '_ {
@@ -539,6 +571,14 @@ impl<'db> Tuple<'db> {
         match self {
             Tuple::Fixed(tuple) => tuple.concat(other),
             Tuple::Variable(tuple) => tuple.concat(db, other),
+        }
+    }
+
+    /// Adds a sequence of fixed elements to the end of this tuple.
+    pub(crate) fn extend(&mut self, types: impl Iterator<Item = Type<'db>>) {
+        match self {
+            Tuple::Fixed(tuple) => tuple.extend(types),
+            Tuple::Variable(tuple) => tuple.extend(types),
         }
     }
 
