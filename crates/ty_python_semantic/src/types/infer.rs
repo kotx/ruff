@@ -47,7 +47,7 @@ use salsa;
 use salsa::plumbing::AsId;
 
 use crate::module_name::{ModuleName, ModuleNameResolutionError};
-use crate::module_resolver::resolve_module;
+use crate::module_resolver::{file_to_module, resolve_module};
 use crate::node_key::NodeKey;
 use crate::place::{
     Boundness, LookupError, Place, PlaceAndQualifiers, builtins_module_scope, builtins_symbol,
@@ -4451,14 +4451,31 @@ impl<'db, 'ast> TypeInferenceBuilder<'db, 'ast> {
             );
         }
 
-        if let Some(suggestion) = find_best_suggestion_for_unresolved_member(
+        // Where possible, we compute a list of possible names that this might have
+        // been a typo for, and suggest the closest match.
+        //
+        // However, we skip attempting to compute the possible typo candidates if it's a
+        // self-referential import *or* any relative import in an `__init__.py` file.
+        // Attempting to compute the candidates in these cases causes cycles
+        // and runaway execution time.
+        if import_is_self_referential {
+            return;
+        }
+        if import_from.level != 0
+            && file_to_module(self.db(), self.file())
+                .is_some_and(|module| module.kind().is_package())
+        {
+            return;
+        }
+        let Some(suggestion) = find_best_suggestion_for_unresolved_member(
             self.db(),
             module_ty,
             name,
             HideUnderscoredSuggestions::Yes,
-        ) {
-            diagnostic.set_primary_message(format_args!("Did you mean `{suggestion}`?",));
-        }
+        ) else {
+            return;
+        };
+        diagnostic.set_primary_message(format_args!("Did you mean `{suggestion}`?"));
     }
 
     fn infer_return_statement(&mut self, ret: &ast::StmtReturn) {
