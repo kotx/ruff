@@ -63,7 +63,10 @@ impl<'db> SemanticModel<'db> {
             return vec![];
         };
         let ty = Type::module_literal(self.db, self.file, &module);
-        crate::types::all_members(self.db, ty).into_iter().collect()
+        crate::types::all_members(self.db, ty)
+            .into_iter()
+            .chain(module.all_submodules(self.db))
+            .collect()
     }
 
     /// Returns completions for symbols available in a `object.<CURSOR>` context.

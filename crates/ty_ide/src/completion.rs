@@ -2181,6 +2181,27 @@ Cougar = 3
     }
 
     #[test]
+    fn from_import_with_submodule() {
+        let test = CursorTest::builder()
+            .source("main.py", "from package import <CURSOR>")
+            .source("package/__init__.py", "")
+            .source("package/foo.py", "")
+            .source("package/bar.pyi", "")
+            .source("package/foo-bar.py", "")
+            .source("package/data.txt", "")
+            .source("package/sub/__init__.py", "")
+            .source("package/not-a-submodule/__init__.py", "")
+            .build();
+
+        test.assert_completions_include("foo");
+        test.assert_completions_include("bar");
+        test.assert_completions_include("sub");
+        test.assert_completions_do_not_include("foo-bar");
+        test.assert_completions_do_not_include("data");
+        test.assert_completions_do_not_include("not-a-submodule");
+    }
+
+    #[test]
     fn import_submodule_not_attribute1() {
         let test = cursor_test(
             "\

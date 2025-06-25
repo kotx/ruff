@@ -3,9 +3,13 @@ use std::str::FromStr;
 use std::sync::Arc;
 
 use ruff_db::files::File;
+use ruff_python_ast::name::Name;
+use ruff_python_stdlib::identifiers::is_identifier;
 
 use super::path::SearchPath;
+use crate::Db;
 use crate::module_name::ModuleName;
+use crate::module_resolver::path::SystemOrVendoredPathRef;
 
 /// Representation of a Python module.
 #[derive(Clone, PartialEq, Eq, Hash)]
@@ -84,6 +88,66 @@ impl Module {
             ModuleInner::FileModule { kind, .. } => *kind,
             ModuleInner::NamespacePackage { .. } => ModuleKind::Package,
         }
+    }
+
+    /// Return a list of all submodules of this module.
+    ///
+    /// Returns an empty list if the module is not a package, if it is an empty package,
+    /// or if it is a namespace package (one without an `__init__.py` or `__init__.pyi` file).
+    pub fn all_submodules(&self, db: &dyn Db) -> Vec<Name> {
+        self.all_submodules_inner(db).unwrap_or_default()
+    }
+
+    fn all_submodules_inner(&self, db: &dyn Db) -> Option<Vec<Name>> {
+        // It would be complex and expensive to compute all submodules for
+        // namespace packages, since a namespace package doesn't correspond
+        // to a single file; it can span multiple directories across multiple
+        // search paths. For now, we only compute submodules for traditional
+        // packages that exist in a single directory on a single search path.
+        let ModuleInner::FileModule {
+            kind: ModuleKind::Package,
+            file,
+            ..
+        } = &*self.inner
+        else {
+            return None;
+        };
+
+        let path = SystemOrVendoredPathRef::try_from_file(db, *file)?;
+
+        debug_assert!(
+            matches!(path.file_name(), Some("__init__.py" | "__init__.pyi"),),
+            "{:?}",
+            path.file_name()
+        );
+
+        let parent_directory = path.parent()?;
+
+        // TODO: it should be possible to compute submodules for vendored packages as well.
+        let SystemOrVendoredPathRef::System(parent_directory) = parent_directory else {
+            return None;
+        };
+
+        let directory_iterator = db.system().read_directory(parent_directory).ok()?;
+
+        let submodules = directory_iterator
+            .flatten()
+            .filter(|entry| {
+                entry.file_type().is_directory()
+                    || (entry.file_type().is_file()
+                        && matches!(entry.path().extension(), Some("py" | "pyi"))
+                        && !matches!(
+                            entry.path().file_name(),
+                            Some("__init__.py" | "__init__.pyi")
+                        ))
+            })
+            .filter_map(|entry| {
+                let stem = entry.path().file_stem()?;
+                is_identifier(stem).then(|| Name::from(stem))
+            })
+            .collect();
+
+        Some(submodules)
     }
 }
 
