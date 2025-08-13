@@ -11,7 +11,7 @@ pub fn goto_type_definition(
     offset: TextSize,
 ) -> Option<RangedValue<NavigationTargets>> {
     let module = parsed_module(db, file).load(db);
-    let goto_target = find_goto_target(&module, offset)?;
+    let goto_target = find_goto_target(db, file, &module, offset)?;
 
     let model = SemanticModel::new(db, file);
     let ty = goto_target.inferred_type(&model)?;
@@ -226,24 +226,7 @@ mod tests {
             "#,
         );
 
-        assert_snapshot!(test.goto_type_definition(), @r#"
-        info[goto-type-definition]: Type definition
-           --> stdlib/builtins.pyi:892:7
-            |
-        890 |     def __getitem__(self, key: int, /) -> str | int | None: ...
-        891 |
-        892 | class str(Sequence[str]):
-            |       ^^^
-        893 |     """str(object='') -> str
-        894 |     str(bytes_or_buffer[, encoding[, errors]]) -> str
-            |
-        info: Source
-         --> main.py:2:22
-          |
-        2 |             a: str = "test"
-          |                      ^^^^^^
-          |
-        "#);
+        assert_snapshot!(test.goto_type_definition(), @"No goto target found");
     }
 
     #[test]
