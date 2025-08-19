@@ -5,7 +5,7 @@ use anstyle::Style;
 use similar::{ChangeTag, TextDiff};
 
 use ruff_annotate_snippets::Renderer as AnnotateRenderer;
-use ruff_diagnostics::{Applicability, Fix};
+use ruff_diagnostics::Fix;
 use ruff_source_file::OneIndexed;
 use ruff_text_size::{Ranged, TextRange, TextSize};
 
@@ -57,7 +57,6 @@ impl<'a> FullRenderer<'a> {
             for diag in renderable.diagnostics.iter() {
                 writeln!(f, "{}", renderer.render(diag.to_annotate()))?;
             }
-            writeln!(f)?;
 
             if self.config.show_fix_diff && diag.fix_applies(self.config) {
                 if let Some(diff) = Diff::from_diagnostic(diag, &stylesheet, self.resolver) {
@@ -116,22 +115,9 @@ impl std::fmt::Display for Diff<'_> {
             last_end = edit.end();
         }
 
-        output.push_str(&source_text[usize::from(last_end)..]);
+        output.push_str(&source_code.text()[usize::from(last_end)..]);
 
-        let diff = TextDiff::from_lines(source_text, &output);
-
-        let message = match self.fix.applicability() {
-            // TODO(zanieb): Adjust this messaging once it's user-facing
-            Applicability::Safe => "Safe fix",
-            Applicability::Unsafe => "Unsafe fix",
-            Applicability::DisplayOnly => "Display-only fix",
-        };
-
-        // TODO(brent) `stylesheet.separator` is cyan rather than blue, as we had before. I think
-        // we're getting rid of this soon anyway, so I didn't think it was worth adding another
-        // style to the stylesheet temporarily. The color doesn't appear at all in the snapshot
-        // tests, which is the only place these are currently used.
-        writeln!(f, "ℹ {}", fmt_styled(message, self.stylesheet.separator))?;
+        let diff = TextDiff::from_lines(source_code.text(), &output);
 
         let (largest_old, largest_new) = diff
             .ops()
@@ -139,7 +125,7 @@ impl std::fmt::Display for Diff<'_> {
             .map(|op| (op.old_range().start, op.new_range().start))
             .unwrap_or_default();
 
-        let digit_with = OneIndexed::from_zero_indexed(largest_new.max(largest_old)).digits();
+        let digit_width = OneIndexed::from_zero_indexed(largest_new.max(largest_old)).digits();
 
         for (idx, group) in diff.grouped_ops(3).iter().enumerate() {
             if idx > 0 {
@@ -147,29 +133,43 @@ impl std::fmt::Display for Diff<'_> {
             }
             for op in group {
                 for change in diff.iter_inline_changes(op) {
-                    let sign = match change.tag() {
-                        ChangeTag::Delete => "-",
-                        ChangeTag::Insert => "+",
-                        ChangeTag::Equal => " ",
+                    let (sign, style, line_no_style, index) = match change.tag() {
+                        ChangeTag::Delete => (
+                            "-",
+                            self.stylesheet.deletion,
+                            self.stylesheet.deletion_line_no,
+                            None,
+                        ),
+                        ChangeTag::Insert => (
+                            "+",
+                            self.stylesheet.insertion,
+                            self.stylesheet.insertion_line_no,
+                            change.new_index(),
+                        ),
+                        ChangeTag::Equal => (
+                            " ",
+                            self.stylesheet.none,
+                            self.stylesheet.line_no,
+                            change.old_index(),
+                        ),
                     };
 
-                    let line_style = LineStyle::from(change.tag(), self.stylesheet);
-
-                    let old_index = change.old_index().map(OneIndexed::from_zero_indexed);
-                    let new_index = change.new_index().map(OneIndexed::from_zero_indexed);
+                    let index = index.map(OneIndexed::from_zero_indexed);
 
                     write!(
                         f,
-                        "{} {} |{}",
-                        Line {
-                            index: old_index,
-                            width: digit_with
-                        },
-                        Line {
-                            index: new_index,
-                            width: digit_with
-                        },
-                        fmt_styled(line_style.apply_to(sign), self.stylesheet.emphasis),
+                        "{}{}",
+                        fmt_styled(
+                            format_args!(
+                                "{} |",
+                                Line {
+                                    index,
+                                    width: digit_width
+                                },
+                            ),
+                            self.stylesheet.line_no,
+                        ),
+                        fmt_styled(sign, style),
                     )?;
 
                     for (emphasized, value) in change.iter_strings_lossy() {
@@ -178,10 +178,10 @@ impl std::fmt::Display for Diff<'_> {
                             write!(
                                 f,
                                 "{}",
-                                fmt_styled(line_style.apply_to(&value), self.stylesheet.underline)
+                                fmt_styled(fmt_styled(value, style), self.stylesheet.underline)
                             )?;
                         } else {
-                            write!(f, "{}", line_style.apply_to(&value))?;
+                            write!(f, "{}", fmt_styled(value, style))?;
                         }
                     }
                     if change.missing_newline() {
