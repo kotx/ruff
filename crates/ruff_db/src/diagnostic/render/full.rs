@@ -190,6 +190,12 @@ impl std::fmt::Display for Diff<'_> {
                 }
             }
         }
+        writeln!(
+            f,
+            "{note}: {msg}",
+            note = fmt_styled("note", self.stylesheet.warning),
+            msg = fmt_styled("This is an unsafe fix", self.stylesheet.emphasis)
+        )?;
 
         Ok(())
     }
