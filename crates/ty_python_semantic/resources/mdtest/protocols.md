@@ -2226,6 +2226,27 @@ def f(value: Iterator):
     cast(Iterator, value)  # error: [redundant-cast]
 ```
 
+### Recursive generic protocols
+
+This snippet caused us to stack overflow on an early version of
+<https://github.com/astral-sh/ruff/pull/19866>:
+
+```toml
+[environment]
+python-version = "3.12"
+```
+
+```py
+from typing import Protocol
+
+class A: ...
+
+class Foo[T](Protocol):
+    def x(self) -> "T | Foo[T]": ...
+
+y: A | Foo[A]
+```
+
 ## Meta-protocols
 
 Where `P` is a protocol type, a class object `N` can be said to inhabit the type `type[P]` if:
