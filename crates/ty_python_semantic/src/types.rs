@@ -5616,6 +5616,7 @@ impl<'db> Type<'db> {
                     invalid_expressions: smallvec::smallvec_inline![InvalidTypeExpression::Generic],
                     fallback_type: Type::unknown(),
                 }),
+                KnownInstanceType::NewType(newtype) => Ok(Type::newtype_nominal_instance(*newtype)),
             },
 
             Type::SpecialForm(special_form) => match special_form {
@@ -6686,6 +6687,10 @@ pub enum KnownInstanceType<'db> {
 
     /// A single instance of `dataclasses.Field`
     Field(FieldInstance<'db>),
+
+    /// An identity function created with `typing.NewType(name, base)`, which behaves like a
+    /// subclass of `base` in type expressions. See `NewTypeInstance` for an example.
+    NewType(NewTypeInstance<'db>),
 }
 
 fn walk_known_instance_type<'db, V: visitor::TypeVisitor<'db> + ?Sized>(
@@ -6710,6 +6715,11 @@ fn walk_known_instance_type<'db, V: visitor::TypeVisitor<'db> + ?Sized>(
         KnownInstanceType::Field(field) => {
             visitor.visit_type(db, field.default_type(db));
         }
+        KnownInstanceType::NewType(newtype) => {
+            if let ClassType::Generic(generic_alias) = newtype.base_class_type(db) {
+                visitor.visit_generic_alias_type(db, generic_alias);
+            }
+        }
     }
 }
 
@@ -6731,6 +6741,7 @@ impl<'db> KnownInstanceType<'db> {
                 Self::Deprecated(deprecated)
             }
             Self::Field(field) => Self::Field(field.normalized_impl(db, visitor)),
+            Self::NewType(newtype) => Self::NewType(newtype.normalized_impl(db, visitor)),
         }
     }
 
@@ -6741,6 +6752,7 @@ impl<'db> KnownInstanceType<'db> {
             Self::TypeAliasType(_) => KnownClass::TypeAliasType,
             Self::Deprecated(_) => KnownClass::Deprecated,
             Self::Field(_) => KnownClass::Field,
+            Self::NewType(_) => KnownClass::NewType,
         }
     }
 
@@ -6790,6 +6802,9 @@ impl<'db> KnownInstanceType<'db> {
                         f.write_str("dataclasses.Field[")?;
                         field.default_type(self.db).display(self.db).fmt(f)?;
                         f.write_str("]")
+                    }
+                    KnownInstanceType::NewType(declaration) => {
+                        f.write_str(declaration.name(self.db))
                     }
                 }
             }
@@ -7156,6 +7171,107 @@ impl<'db> FieldInstance<'db> {
             self.init(db),
             self.kw_only(db),
         )
+    }
+}
+
+/// A `typing.NewType` declaration, either from the perspective of the
+/// identity-function-that-acts-like-a-subclass-in-type-expressions returned by the call to
+/// `NewType`, or from the perspective of instances of that subclass. For example:
+///
+/// ```py
+/// from typing import NewType
+/// Foo = NewType("Foo", int)
+/// x = Foo(42)
+/// ```
+///
+/// The revealed types there are:
+/// - `NewType`: `Type::ClassLiteral(ClassLiteral)` with `KnownClass::NewType`.
+/// - `Foo`: `Type::KnownInstance(KnownInstanceType::NewType(NewTypeInstance { .. }))`
+/// - `x`: `Type::NominalInstance(...(NominalInstanceInner::NewType(NewTypeInstance { .. }))`
+#[salsa::interned(debug, heap_size=ruff_memory_usage::heap_size)]
+#[derive(PartialOrd, Ord)]
+pub struct NewTypeInstance<'db> {
+    /// The name of this NewType (e.g. `"Foo"`)
+    #[returns(ref)]
+    pub name: ast::name::Name,
+
+    /// The binding where this NewType is first created.
+    pub definition: Definition<'db>,
+
+    // The base class of this NewType (e.g. `int`), which could be a (specialized) class type or
+    // could be another NewType.
+    pub base: NewTypeBase<'db>,
+}
+
+impl get_size2::GetSize for NewTypeInstance<'_> {}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, get_size2::GetSize)]
+pub enum NewTypeBase<'db> {
+    ClassType(ClassType<'db>),
+    NewType(NewTypeInstance<'db>),
+}
+
+impl<'db> NewTypeInstance<'db> {
+    // Walk the `NewTypeBase` chain to find the underlying `ClassType`.
+    fn base_class_type(self, db: &'db dyn Db) -> ClassType<'db> {
+        let mut base = self.base(db);
+        loop {
+            match base {
+                NewTypeBase::ClassType(class) => return class,
+                NewTypeBase::NewType(newtype) => base = newtype.base(db),
+            }
+        }
+    }
+
+    fn normalized_impl(self, db: &'db dyn Db, visitor: &NormalizedVisitor<'db>) -> Self {
+        let normalized_base = match self.base(db) {
+            NewTypeBase::ClassType(base_class) => {
+                NewTypeBase::ClassType(base_class.normalized_impl(db, visitor))
+            }
+            NewTypeBase::NewType(base_newtype) => {
+                NewTypeBase::NewType(base_newtype.normalized_impl(db, visitor))
+            }
+        };
+        Self::new(
+            db,
+            self.name(db).clone(),
+            self.definition(db),
+            normalized_base,
+        )
+    }
+
+    fn materialize(self, db: &'db dyn Db, variance: TypeVarVariance) -> Self {
+        let materialized_base = match self.base(db) {
+            NewTypeBase::ClassType(base_class) => {
+                NewTypeBase::ClassType(base_class.materialize(db, variance))
+            }
+            NewTypeBase::NewType(base_newtype) => {
+                NewTypeBase::NewType(base_newtype.materialize(db, variance))
+            }
+        };
+        Self::new(
+            db,
+            self.name(db).clone(),
+            self.definition(db),
+            materialized_base,
+        )
+    }
+
+    fn apply_type_mapping_impl<'a>(
+        self,
+        db: &'db dyn Db,
+        type_mapping: &TypeMapping<'a, 'db>,
+        visitor: &ApplyTypeMappingVisitor<'db>,
+    ) -> Self {
+        let mapped_base = match self.base(db) {
+            NewTypeBase::ClassType(base_class) => NewTypeBase::ClassType(
+                base_class.apply_type_mapping_impl(db, type_mapping, visitor),
+            ),
+            NewTypeBase::NewType(base_newtype) => NewTypeBase::NewType(
+                base_newtype.apply_type_mapping_impl(db, type_mapping, visitor),
+            ),
+        };
+        Self::new(db, self.name(db).clone(), self.definition(db), mapped_base)
     }
 }
 
