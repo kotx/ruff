@@ -190,7 +190,10 @@ impl std::fmt::Display for Diff<'_> {
                     f,
                     "{note}: {msg}",
                     note = fmt_styled("note", self.stylesheet.warning),
-                    msg = fmt_styled("This is an unsafe fix", self.stylesheet.emphasis)
+                    msg = fmt_styled(
+                        "This is an unsafe fix and may remove comments or change runtime behavior",
+                        self.stylesheet.emphasis
+                    )
                 )?;
             }
             Applicability::DisplayOnly => {
@@ -200,7 +203,10 @@ impl std::fmt::Display for Diff<'_> {
                     f,
                     "{note}: {msg}",
                     note = fmt_styled("note", self.stylesheet.error),
-                    msg = fmt_styled("This is a display-only fix", self.stylesheet.emphasis)
+                    msg = fmt_styled(
+                        "This is a display-only fix and is likely to be incorrect",
+                        self.stylesheet.emphasis
+                    )
                 )?;
             }
         }
