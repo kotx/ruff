@@ -4,7 +4,7 @@ use std::num::NonZeroUsize;
 use similar::{ChangeTag, TextDiff};
 
 use ruff_annotate_snippets::Renderer as AnnotateRenderer;
-use ruff_diagnostics::Fix;
+use ruff_diagnostics::{Applicability, Fix};
 use ruff_source_file::OneIndexed;
 use ruff_text_size::{Ranged, TextRange, TextSize};
 
@@ -182,12 +182,28 @@ impl std::fmt::Display for Diff<'_> {
                 }
             }
         }
-        writeln!(
-            f,
-            "{note}: {msg}",
-            note = fmt_styled("note", self.stylesheet.warning),
-            msg = fmt_styled("This is an unsafe fix", self.stylesheet.emphasis)
-        )?;
+
+        match self.fix.applicability() {
+            Applicability::Safe => {}
+            Applicability::Unsafe => {
+                writeln!(
+                    f,
+                    "{note}: {msg}",
+                    note = fmt_styled("note", self.stylesheet.warning),
+                    msg = fmt_styled("This is an unsafe fix", self.stylesheet.emphasis)
+                )?;
+            }
+            Applicability::DisplayOnly => {
+                // Note that this is still only used in tests. There's no `--display-only-fixes`
+                // analog to `--unsafe-fixes` for users to activate this or see the styling.
+                writeln!(
+                    f,
+                    "{note}: {msg}",
+                    note = fmt_styled("note", self.stylesheet.error),
+                    msg = fmt_styled("This is a display-only fix", self.stylesheet.emphasis)
+                )?;
+            }
+        }
 
         Ok(())
     }
