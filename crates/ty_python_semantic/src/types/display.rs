@@ -124,6 +124,9 @@ impl Display for DisplayRepresentation<'_> {
                     (ClassType::Generic(alias), _) => alias.display_with(self.db, self.settings).fmt(f),
                 }
             }
+            Type::NewTypeInstance(newtype_instance) => {
+                f.write_str(newtype_instance.name(self.db))
+            }
             Type::ProtocolInstance(protocol) => match protocol.inner {
                 Protocol::FromClass(ClassType::NonGeneric(class)) => {
                     f.write_str(class.name(self.db))

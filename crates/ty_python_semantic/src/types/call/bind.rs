@@ -27,6 +27,7 @@ use crate::types::function::{
     DataclassTransformerParams, FunctionDecorators, FunctionType, KnownFunction, OverloadLiteral,
 };
 use crate::types::generics::{Specialization, SpecializationBuilder, SpecializationError};
+use crate::types::newtype::NewTypePseudoClass;
 use crate::types::signatures::{Parameter, ParameterForm, Parameters};
 use crate::types::tuple::{Tuple, TupleLength, TupleType};
 use crate::types::{
@@ -1054,6 +1055,36 @@ impl<'db> Bindings<'db> {
                                 )));
                             }
                         }
+
+                        Some(KnownClass::NewType) => match overload.parameter_types() {
+                            [Some(Type::StringLiteral(name)), Some(supertype)] => {
+                                let pseudo_class =
+                                    if let Some(supertype) = supertype.to_class_type(db) {
+                                        NewTypePseudoClass::from_class(
+                                            db,
+                                            &name.value(db),
+                                            supertype,
+                                            definition,
+                                        )
+                                    } else if let Type::KnownInstance(
+                                        KnownInstanceType::NewTypePseudoClass(newtype_class),
+                                    ) = supertype
+                                    {
+                                        NewTypePseudoClass::from_new_type(
+                                            db,
+                                            &name.value(db),
+                                            *newtype_class,
+                                            definition,
+                                        )
+                                    } else {
+                                        continue;
+                                    };
+                                overload.set_return_type(Type::KnownInstance(
+                                    KnownInstanceType::NewTypePseudoClass(pseudo_class),
+                                ));
+                            }
+                            _ => {}
+                        },
 
                         _ => {}
                     },

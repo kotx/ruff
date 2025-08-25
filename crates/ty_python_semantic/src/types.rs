@@ -60,6 +60,7 @@ pub use crate::types::ide_support::{
 use crate::types::infer::infer_unpack_types;
 use crate::types::mro::{Mro, MroError, MroIterator};
 pub(crate) use crate::types::narrow::infer_narrowing_constraint;
+use crate::types::newtype::{NewTypeInstance, NewTypePseudoClass};
 use crate::types::signatures::{Parameter, ParameterForm, Parameters, walk_signature};
 use crate::types::tuple::TupleSpec;
 pub(crate) use crate::types::typed_dict::{TypedDictParams, TypedDictType, walk_typed_dict_type};
@@ -89,6 +90,7 @@ mod infer;
 mod instance;
 mod mro;
 mod narrow;
+mod newtype;
 mod protocol_class;
 mod signatures;
 mod special_form;
@@ -617,6 +619,18 @@ pub enum Type<'db> {
     /// The set of Python objects with the given class in their __class__'s method resolution order.
     /// Construct this variant using the `Type::instance` constructor function.
     NominalInstance(NominalInstanceType<'db>),
+    /// The set of Python objects that are considered by ty to inhabit a type created by a
+    /// call to `NewType(...)`.
+    ///
+    /// For example:
+    ///
+    /// ```py
+    /// from typing import NewType
+    /// UserId = NewType('UserId', int)  # The call to `NewType` creates a pseudo-class `UserId`
+    /// x = UserId(42)                   # `x` inhabits the type `UserId`,
+    ///                                  # which is represented in our model with `Type::NewTypeInstance`
+    /// ```
+    NewTypeInstance(NewTypeInstance<'db>),
     /// The set of Python objects that conform to the interface described by a given protocol.
     /// Construct this variant using the `Type::instance` constructor function.
     ProtocolInstance(ProtocolInstanceType<'db>),
@@ -4963,6 +4977,7 @@ impl<'db> Type<'db> {
         }
 
         let special_case = match self {
+            Type::NewTypeInstance(newtype_instance) => newtype_instance.tuple_spec(db),
             Type::NominalInstance(nominal) => nominal.tuple_spec(db),
             Type::GenericAlias(alias) if alias.origin(db).is_tuple(db) => {
                 Some(Cow::Owned(TupleSpec::homogeneous(todo_type!(
@@ -5597,6 +5612,9 @@ impl<'db> Type<'db> {
                     )
                     .map(Type::NonInferableTypeVar)
                     .unwrap_or(*self))
+                }
+                KnownInstanceType::NewTypePseudoClass(newtype) => {
+                    Ok(Type::NewTypeInstance(newtype.to_instance()))
                 }
                 KnownInstanceType::Deprecated(_) => Err(InvalidTypeExpressionError {
                     invalid_expressions: smallvec::smallvec![InvalidTypeExpression::Deprecated],
@@ -6686,6 +6704,9 @@ pub enum KnownInstanceType<'db> {
 
     /// A single instance of `dataclasses.Field`
     Field(FieldInstance<'db>),
+
+    /// The object returned by a call to `typing.NewType`.
+    NewTypePseudoClass(NewTypePseudoClass<'db>),
 }
 
 fn walk_known_instance_type<'db, V: visitor::TypeVisitor<'db> + ?Sized>(
@@ -6741,6 +6762,7 @@ impl<'db> KnownInstanceType<'db> {
             Self::TypeAliasType(_) => KnownClass::TypeAliasType,
             Self::Deprecated(_) => KnownClass::Deprecated,
             Self::Field(_) => KnownClass::Field,
+            Self::NewTypePseudoClass(_) => KnownClass::NewType,
         }
     }
 
@@ -6790,6 +6812,13 @@ impl<'db> KnownInstanceType<'db> {
                         f.write_str("dataclasses.Field[")?;
                         field.default_type(self.db).display(self.db).fmt(f)?;
                         f.write_str("]")
+                    }
+                    KnownInstanceType::NewTypePseudoClass(new_type) => {
+                        write!(
+                            f,
+                            "<Pseudo-class object for NewType `{}`>",
+                            new_type.name(self.db)
+                        )
                     }
                 }
             }

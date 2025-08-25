@@ -164,6 +164,7 @@ impl<'db> ClassBase<'db> {
                 KnownInstanceType::TypeAliasType(_)
                 | KnownInstanceType::TypeVar(_)
                 | KnownInstanceType::Deprecated(_)
+                | KnownInstanceType::NewTypePseudoClass(_)
                 | KnownInstanceType::Field(_) => None,
             },
 
