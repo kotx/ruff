@@ -1297,7 +1297,8 @@ impl<'db> Field<'db> {
     pub(crate) fn is_kw_only_sentinel(&self, db: &'db dyn Db) -> bool {
         self.declared_ty
             .into_nominal_instance()
-            .is_some_and(|instance| instance.class(db).is_known(db, KnownClass::KwOnly))
+            .and_then(|instance| instance.class_if_not_newtype(db))
+            .is_some_and(|class| class.is_known(db, KnownClass::KwOnly))
     }
 }
 
@@ -4289,14 +4290,6 @@ impl KnownClass {
     pub(super) fn is_subclass_of<'db>(self, db: &'db dyn Db, other: ClassType<'db>) -> bool {
         self.try_to_class_literal_without_logging(db)
             .is_ok_and(|class| class.is_subclass_of(db, None, other))
-    }
-
-    pub(super) fn when_subclass_of<'db, C: Constraints<'db>>(
-        self,
-        db: &'db dyn Db,
-        other: ClassType<'db>,
-    ) -> C {
-        C::from_bool(db, self.is_subclass_of(db, other))
     }
 
     /// Return the module in which we should look up the definition for this class

@@ -2566,7 +2566,13 @@ pub(crate) fn report_undeclared_protocol_member(
                 SubclassOfInner::Dynamic(DynamicType::Any) => return true,
                 SubclassOfInner::Dynamic(_) => return false,
             },
-            Type::NominalInstance(instance) => instance.class(db),
+            Type::NominalInstance(instance) => {
+                if let Some(class) = instance.class_if_not_newtype(db) {
+                    class
+                } else {
+                    return false;
+                }
+            }
             _ => return false,
         };
 
