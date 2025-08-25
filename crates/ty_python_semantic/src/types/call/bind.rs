@@ -589,6 +589,8 @@ impl<'db> Bindings<'db> {
 
                         Some(KnownFunction::IsSubtypeOf) => {
                             if let [Some(ty_a), Some(ty_b)] = overload.parameter_types() {
+                                let x = ty_a.when_subtype_of::<ConstraintSet>(db, *ty_b);
+                                eprintln!("==> {}", x.display(db));
                                 overload.set_return_type(Type::BooleanLiteral(
                                     ty_a.is_subtype_of(db, *ty_b),
                                 ));

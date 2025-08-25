@@ -339,6 +339,17 @@ impl<'db> Constraints<'db> for ConstraintSet<'db> {
         }
         result
     }
+
+    // XXX
+    fn implies(self, db: &'db dyn Db, other: impl FnOnce() -> Self) -> Self {
+        let q = other();
+        eprintln!("==> {} implies {}", self.display(db), q.display(db));
+        eprintln!(
+            "==> p ∧ q {}",
+            self.clone().and(db, || q.clone()).display(db)
+        );
+        self.clone().negate(db).or(db, || self.and(db, || q))
+    }
 }
 
 /// The intersection of a list of atomic constraints.
@@ -688,6 +699,7 @@ impl<'db> AtomicConstraint<'db> {
     /// `self` and `other` is `self`.
     fn subsumes(self, db: &'db dyn Db, other: Self) -> bool {
         debug_assert!(self.typevar == other.typevar);
+        eprintln!("==> subsumes? {} {}", self.display(db), other.display(db));
         self.intersect(db, other) == Simplified::One(self)
     }
 
