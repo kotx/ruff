@@ -130,9 +130,9 @@ pub(super) fn union_or_intersection_elements_ordering<'db>(
         (Type::TypeIs(_), _) => Ordering::Less,
         (_, Type::TypeIs(_)) => Ordering::Greater,
 
-        (Type::NominalInstance(left), Type::NominalInstance(right)) => {
-            left.class(db).cmp(&right.class(db))
-        }
+        (Type::NominalInstance(left), Type::NominalInstance(right)) => left
+            .class_ignoring_newtype(db)
+            .cmp(&right.class_ignoring_newtype(db)),
         (Type::NominalInstance(_), _) => Ordering::Less,
         (_, Type::NominalInstance(_)) => Ordering::Greater,
 
@@ -179,9 +179,9 @@ pub(super) fn union_or_intersection_elements_ordering<'db>(
                 (SuperOwnerKind::Class(left), SuperOwnerKind::Class(right)) => left.cmp(&right),
                 (SuperOwnerKind::Class(_), _) => Ordering::Less,
                 (_, SuperOwnerKind::Class(_)) => Ordering::Greater,
-                (SuperOwnerKind::Instance(left), SuperOwnerKind::Instance(right)) => {
-                    left.class(db).cmp(&right.class(db))
-                }
+                (SuperOwnerKind::Instance(left), SuperOwnerKind::Instance(right)) => left
+                    .class_ignoring_newtype(db)
+                    .cmp(&right.class_ignoring_newtype(db)),
                 (SuperOwnerKind::Instance(_), _) => Ordering::Less,
                 (_, SuperOwnerKind::Instance(_)) => Ordering::Greater,
                 (SuperOwnerKind::Dynamic(left), SuperOwnerKind::Dynamic(right)) => {

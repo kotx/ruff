@@ -1822,7 +1822,7 @@ impl<'db, 'ast> TypeInferenceBuilder<'db, 'ast> {
             Type::BooleanLiteral(_) | Type::IntLiteral(_) => {}
             Type::NominalInstance(instance)
                 if matches!(
-                    instance.class(self.db()).known(self.db()),
+                    instance.class_ignoring_newtype(self.db()).known(self.db()),
                     Some(KnownClass::Float | KnownClass::Int | KnownClass::Bool)
                 ) => {}
             _ => return false,
@@ -4003,7 +4003,9 @@ impl<'db, 'ast> TypeInferenceBuilder<'db, 'ast> {
 
             // Super instances do not allow attribute assignment
             Type::NominalInstance(instance)
-                if instance.class(db).is_known(db, KnownClass::Super) =>
+                if instance
+                    .class_ignoring_newtype(db)
+                    .is_known(db, KnownClass::Super) =>
             {
                 if emit_diagnostics {
                     if let Some(builder) = self.context.report_lint(&INVALID_ASSIGNMENT, target) {
@@ -9122,7 +9124,7 @@ impl<'db, 'ast> TypeInferenceBuilder<'db, 'ast> {
                 Type::Dynamic(DynamicType::TodoUnpack) => Err(GenericContextError::NotYetSupported),
                 Type::NominalInstance(nominal)
                     if matches!(
-                        nominal.class(self.db()).known(self.db()),
+                        nominal.class_ignoring_newtype(self.db()).known(self.db()),
                         Some(KnownClass::TypeVarTuple | KnownClass::ParamSpec)
                     ) =>
                 {
@@ -9166,7 +9168,7 @@ impl<'db, 'ast> TypeInferenceBuilder<'db, 'ast> {
             Some(ty @ (Type::IntLiteral(_) | Type::BooleanLiteral(_))) => SliceArg::Arg(ty),
             Some(ty @ Type::NominalInstance(instance))
                 if instance
-                    .class(self.db())
+                    .class_ignoring_newtype(self.db())
                     .is_known(self.db(), KnownClass::NoneType) =>
             {
                 SliceArg::Arg(ty)
@@ -11116,7 +11118,7 @@ impl<'db> TypeInferenceBuilder<'db, '_> {
                     }
                     Type::NominalInstance(nominal)
                         if nominal
-                            .class(self.db())
+                            .class_ignoring_newtype(self.db())
                             .is_known(self.db(), KnownClass::ParamSpec) =>
                     {
                         return Some(Parameters::todo());

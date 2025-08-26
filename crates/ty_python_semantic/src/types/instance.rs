@@ -134,16 +134,34 @@ pub(super) fn walk_nominal_instance_type<'db, V: super::visitor::TypeVisitor<'db
     nominal: NominalInstanceType<'db>,
     visitor: &V,
 ) {
-    visitor.visit_type(db, nominal.class(db).into());
+    visitor.visit_type(db, nominal.class_ignoring_newtype(db).into());
 }
 
 impl<'db> NominalInstanceType<'db> {
-    pub(super) fn class(&self, db: &'db dyn Db) -> ClassType<'db> {
+    pub(super) fn class_and_newtype(
+        &self,
+        db: &'db dyn Db,
+    ) -> (ClassType<'db>, Option<NewTypeInstance<'db>>) {
         match self.0 {
-            NominalInstanceInner::ExactTuple(tuple) => tuple.to_class_type(db),
-            NominalInstanceInner::NewType(newtype) => todo!("JACK: what goes here?"),
-            NominalInstanceInner::Class(class) => class,
+            NominalInstanceInner::ExactTuple(tuple) => (tuple.to_class_type(db), None),
+            NominalInstanceInner::NewType(newtype) => (newtype.base_class_type(db), Some(newtype)),
+            NominalInstanceInner::Class(class) => (class, None),
         }
+    }
+
+    pub(super) fn class_ignoring_newtype(&self, db: &'db dyn Db) -> ClassType<'db> {
+        self.class_and_newtype(db).0
+    }
+
+    pub(super) fn class_if_not_newtype(&self, db: &'db dyn Db) -> Option<ClassType<'db>> {
+        match self.0 {
+            NominalInstanceInner::NewType(_) => None,
+            _ => Some(self.class_ignoring_newtype(db)),
+        }
+    }
+
+    pub(super) fn is_newtype(&self) -> bool {
+        matches!(self.0, NominalInstanceInner::NewType(_))
     }
 
     /// If this is an instance type where the class has a tuple spec, returns the tuple spec.
@@ -242,7 +260,9 @@ impl<'db> NominalInstanceType<'db> {
             Type::IntLiteral(n) => i32::try_from(*n).map(Some).ok(),
             Type::BooleanLiteral(b) => Some(Some(i32::from(*b))),
             Type::NominalInstance(instance)
-                if instance.class(db).is_known(db, KnownClass::NoneType) =>
+                if instance
+                    .class_ignoring_newtype(db)
+                    .is_known(db, KnownClass::NoneType) =>
             {
                 Some(None)
             }
@@ -297,9 +317,12 @@ impl<'db> NominalInstanceType<'db> {
                 NominalInstanceInner::ExactTuple(tuple1),
                 NominalInstanceInner::ExactTuple(tuple2),
             ) => tuple1.has_relation_to_impl(db, tuple2, relation, visitor),
-            _ => self
-                .class(db)
-                .has_relation_to_impl(db, other.class(db), relation, visitor),
+            _ => self.class_ignoring_newtype(db).has_relation_to_impl(
+                db,
+                other.class_ignoring_newtype(db),
+                relation,
+                visitor,
+            ),
         }
     }
 
@@ -339,7 +362,8 @@ impl<'db> NominalInstanceType<'db> {
         result.or(db, || {
             C::from_bool(
                 db,
-                !(self.class(db)).could_coexist_in_mro_with(db, other.class(db)),
+                !(self.class_ignoring_newtype(db))
+                    .could_coexist_in_mro_with(db, other.class_ignoring_newtype(db)),
             )
         })
     }
@@ -378,7 +402,7 @@ impl<'db> NominalInstanceType<'db> {
     }
 
     pub(super) fn to_meta_type(self, db: &'db dyn Db) -> Type<'db> {
-        SubclassOfType::from(db, self.class(db))
+        SubclassOfType::from(db, self.class_ignoring_newtype(db))
     }
 
     pub(super) fn apply_type_mapping_impl<'a>(
@@ -461,7 +485,7 @@ pub(crate) struct SliceLiteral {
 
 impl<'db> VarianceInferable<'db> for NominalInstanceType<'db> {
     fn variance_of(self, db: &'db dyn Db, typevar: BoundTypeVarInstance<'db>) -> TypeVarVariance {
-        self.class(db).variance_of(db, typevar)
+        self.class_ignoring_newtype(db).variance_of(db, typevar)
     }
 }
 
