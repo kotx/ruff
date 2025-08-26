@@ -7,6 +7,21 @@ python-version = "3.13"
 
 [PEP 695] and Python 3.12 introduced new, more ergonomic syntax for type variables.
 
+## fwomp
+
+```py
+from ty_extensions import is_assignable_to, is_subtype_of, static_assert
+from ty_extensions import Intersection
+
+class Super: ...
+class Base(Super): ...
+class Sub(Base): ...
+class Unrelated: ...
+
+def constrained[T: (Base, Unrelated)](t: T) -> None:
+    static_assert(not is_assignable_to(T, Sub))
+```
+
 ## Type variables
 
 ### Defining PEP 695 type variables
