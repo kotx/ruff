@@ -102,6 +102,8 @@ pub(crate) trait Constraints<'db>: Clone + Sized {
         }
         self
     }
+
+    fn display(&self, db: &'db dyn Db) -> impl Display;
 }
 
 /// An extension trait for building constraint sets from [`Option`] values.
@@ -349,6 +351,10 @@ impl<'db> Constraints<'db> for ConstraintSet<'db> {
             self.clone().and(db, || q.clone()).display(db)
         );
         self.clone().negate(db).or(db, || self.and(db, || q))
+    }
+
+    fn display(&self, db: &'db dyn Db) -> impl Display {
+        self.display(db)
     }
 }
 
