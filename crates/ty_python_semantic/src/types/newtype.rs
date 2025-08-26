@@ -5,7 +5,7 @@ use ruff_python_ast::name::Name;
 use crate::{
     Db,
     semantic_index::definition::Definition,
-    types::{ClassType, Type, tuple::TupleSpec},
+    types::{ClassType, Type, constraints::Constraints, tuple::TupleSpec},
 };
 
 #[derive(
@@ -62,6 +62,38 @@ impl<'db> NewTypeInstance<'db> {
             NewTypeBase::Class(class) => Type::instance(db, class).tuple_instance_spec(db),
             NewTypeBase::NewType(newtype) => NewTypeInstance(newtype).tuple_spec(db),
         }
+    }
+
+    pub(crate) fn supertype(self, db: &'db dyn Db) -> Type<'db> {
+        match self.0.supertype(db) {
+            NewTypeBase::Class(class) => Type::instance(db, class),
+            NewTypeBase::NewType(newtype) => Type::NewTypeInstance(NewTypeInstance(newtype)),
+        }
+    }
+
+    pub(crate) fn has_relation_to<C: Constraints<'db>>(
+        self,
+        db: &'db dyn Db,
+        other: NewTypeInstance<'db>,
+    ) -> C {
+        if self == other {
+            return C::from_bool(db, true);
+        }
+        match self.0.supertype(db) {
+            NewTypeBase::Class(_) => C::from_bool(db, false),
+            NewTypeBase::NewType(newtype) => NewTypeInstance(newtype).has_relation_to(db, other),
+        }
+    }
+
+    pub(crate) fn is_disjoint_from<C: Constraints<'db>>(
+        self,
+        db: &'db dyn Db,
+        other: NewTypeInstance<'db>,
+    ) -> C {
+        C::from_bool(
+            db,
+            !(self.has_relation_to(db, other) || other.has_relation_to(db, self)),
+        )
     }
 
     pub(crate) fn name(&self, db: &'db dyn Db) -> &'db str {

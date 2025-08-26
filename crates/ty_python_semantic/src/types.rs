@@ -2287,6 +2287,15 @@ impl<'db> Type<'db> {
                 C::from_bool(db, !known_instance.is_instance_of(db, instance.class(db)))
             }
 
+            (Type::NewTypeInstance(left), Type::NewTypeInstance(right)) => {
+                left.is_disjoint_from(db, right)
+            }
+
+            (Type::NewTypeInstance(new_type_instance), other)
+            | (other, Type::NewTypeInstance(new_type_instance)) => new_type_instance
+                .supertype(db)
+                .is_disjoint_from_impl(db, other, visitor),
+
             (Type::BooleanLiteral(..) | Type::TypeIs(_), Type::NominalInstance(instance))
             | (Type::NominalInstance(instance), Type::BooleanLiteral(..) | Type::TypeIs(_)) => {
                 // A `Type::BooleanLiteral()` must be an instance of exactly `bool`
