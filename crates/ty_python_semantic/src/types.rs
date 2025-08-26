@@ -1469,10 +1469,12 @@ impl<'db> Type<'db> {
                     // subtype of the upper bound will too.) Also add a safety constraint that
                     // ensures that the typevar specializes to a subtype of the upper bound.
                     Some(TypeVarBoundOrConstraints::UpperBound(bound)) => {
-                        C::constrain_typevar(db, bound_typevar, Type::Never, bound)
+                        let x = C::constrain_typevar(db, bound_typevar, Type::Never, bound)
                             .implies(db, || {
                                 bound.has_relation_to_impl(db, target, relation, visitor)
-                            })
+                            });
+                        eprintln!("==> bound {}", x.display(db));
+                        x
                     }
                     Some(TypeVarBoundOrConstraints::Constraints(constraints)) => {
                         constraints.elements(db).iter().when_all(db, |constraint| {

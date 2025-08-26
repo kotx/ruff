@@ -2,6 +2,18 @@
 
 `Never` represents the empty set of values.
 
+## fwomp
+
+```py
+from ty_extensions import static_assert, is_subtype_of
+from typing_extensions import Never, TypeVar
+
+T = TypeVar("T", bound=Never)
+
+def _(t: T):
+    static_assert(is_subtype_of(T, Never))
+```
+
 ## `Never` is a subtype of every type
 
 The `Never` type is the bottom type of Python's type system. It is a subtype of every type, but no
